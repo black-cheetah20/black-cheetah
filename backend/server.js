@@ -346,7 +346,9 @@ app.get("/reports", auth, async (req, res) => {
     res.status(500).json({ message: "Failed to load reports" });
   }
 });
-
+app.get("/", (req, res) => {
+  res.send("Black Cheetah Backend Running");
+});
 app.patch("/reports/:id/status", auth, adminOnly, async (req, res) => {
   try {
     const { status } = req.body;
