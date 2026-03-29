@@ -15,7 +15,7 @@ const crypto = require("crypto");
 const app = express();
 
 app.use(cors({
-  origin: "https://black-cheedtah-5imb.vercel.app"
+  origin: "https://black-cheetah-5imb.vercel.app"
 })
 );
 app.use(express.json());
