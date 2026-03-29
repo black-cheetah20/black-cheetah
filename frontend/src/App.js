@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import axios from "axios";
 import "./App.css";
 
-const API = "http://black-cheetah-backend.onrender.com";
+const API = "https://black-cheetah-backend.onrender.com";
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token") || "");
