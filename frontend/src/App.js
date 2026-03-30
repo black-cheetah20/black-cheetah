@@ -272,22 +272,22 @@ function App() {
     }
   };
 // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (token && role === "admin") {
-      loadEmployees();
-      loadReports();
-      loadAllTasks();
-      loadNotifications();
-    }
-  }, [token, role]);
-// eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (token && role === "employee") {
-      loadEmployeeTasks();
-      loadMyReports();
-    }
-  }, [token, role]);
+useEffect(() => {
+  if (token && role === "admin") {
+    loadEmployees();
+    loadReports();
+    loadAllTasks();
+    loadNotifications();
+  }
+}, [token, role]);
 
+// eslint-disable-next-line react-hooks/exhaustive-deps
+useEffect(() => {
+  if (token && role === "employee") {
+    loadEmployeeTasks();
+    loadMyReports();
+  }
+}, [token, role]);
   const formatImageUrl = (filePath) => {
     if (!filePath) return "";
     return `${API}/${filePath.replace(/\\/g, "/")}`;
