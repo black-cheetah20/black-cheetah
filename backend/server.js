@@ -14,11 +14,7 @@ const crypto = require("crypto");
 
 const app = express();
 
-app.use(cors({
-  origin: true,
-  credentials: true,
-})
-);
+app.use(cors());
 app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 
@@ -76,6 +72,11 @@ const taskSchema = new mongoose.Schema(
     assignedBy: String,
     completed: { type: Boolean, default: false },
     completedAt: Date,
+    expiresAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      index: { expires: 0 },
+    },
   },
   { timestamps: true }
 );
@@ -107,10 +108,15 @@ const ImageHash = mongoose.model("ImageHash", imageHashSchema);
 
 function auth(req, res, next) {
   const token = req.headers.authorization;
-  if (!token) return res.sendStatus(401);
+
+  if (!token) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.sendStatus(403);
+    if (err) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
     req.user = user;
     next();
   });
@@ -122,6 +128,10 @@ function adminOnly(req, res, next) {
   }
   next();
 }
+
+app.get("/", (req, res) => {
+  res.send("Black Cheetah Backend Running");
+});
 
 const storage = multer.diskStorage({
   destination: "uploads/",
@@ -137,6 +147,7 @@ async function getFileHash(filePath) {
   return crypto.createHash("sha256").update(buffer).digest("hex");
 }
 
+// Basic authenticity checker
 async function verifySingleImage(filePath) {
   try {
     const metadata = await sharp(filePath).metadata();
@@ -190,10 +201,11 @@ async function verifyReportImages(files) {
   return { verified: true, reason: "All uploaded images passed basic checks" };
 }
 
-// Create initial users manually if needed
+// Initial user creation if needed
 app.post("/register", async (req, res) => {
   try {
     const existingUser = await User.findOne({ username: req.body.username });
+
     if (existingUser) {
       return res.status(400).json({ message: "Username already exists" });
     }
@@ -218,6 +230,7 @@ app.post("/register", async (req, res) => {
 app.post("/create-employee", auth, adminOnly, async (req, res) => {
   try {
     const existingUser = await User.findOne({ username: req.body.username });
+
     if (existingUser) {
       return res.status(400).json({ message: "Username already exists" });
     }
@@ -231,13 +244,18 @@ app.post("/create-employee", auth, adminOnly, async (req, res) => {
     });
 
     await user.save();
-    res.json({ message: "Employee created successfully", employee: user });
+
+    res.json({
+      message: "Employee created successfully",
+      employee: user,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to create employee" });
   }
 });
 
+// Remove employee and related data
 app.delete("/employees/:id", auth, adminOnly, async (req, res) => {
   try {
     const employee = await User.findOne({
@@ -249,8 +267,22 @@ app.delete("/employees/:id", auth, adminOnly, async (req, res) => {
       return res.status(404).json({ message: "Employee not found" });
     }
 
-    await Task.deleteMany({ assignedToId: employee._id.toString() });
-    await Report.deleteMany({ employeeId: employee._id.toString() });
+    const employeeId = employee._id.toString();
+
+    const reports = await Report.find({ employeeId });
+
+    for (const report of reports) {
+      [report.billImage, report.shopImage, report.employeeImage].forEach((file) => {
+        if (file && fs.existsSync(path.resolve(file))) {
+          try {
+            fs.unlinkSync(path.resolve(file));
+          } catch (_) {}
+        }
+      });
+    }
+
+    await Task.deleteMany({ assignedToId: employeeId });
+    await Report.deleteMany({ employeeId });
     await User.findByIdAndDelete(employee._id);
 
     res.json({ message: "Employee removed successfully" });
@@ -263,11 +295,13 @@ app.delete("/employees/:id", auth, adminOnly, async (req, res) => {
 app.post("/login", async (req, res) => {
   try {
     const user = await User.findOne({ username: req.body.username });
+
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
     const valid = await bcrypt.compare(req.body.password, user.password);
+
     if (!valid) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
@@ -315,7 +349,7 @@ app.post(
   ]),
   async (req, res) => {
     try {
-      const verification = await verifyReportImages(req.files);
+      const verification = await verifyReportImages(req.files || {});
 
       const report = new Report({
         employeeId: req.user.id,
@@ -324,9 +358,9 @@ app.post(
         contact: req.body.contact,
         orderDetails: req.body.orderDetails,
         location: req.body.location,
-        billImage: req.files.billImage?.[0]?.path || "",
-        shopImage: req.files.shopImage?.[0]?.path || "",
-        employeeImage: req.files.employeeImage?.[0]?.path || "",
+        billImage: req.files?.billImage?.[0]?.path || "",
+        shopImage: req.files?.shopImage?.[0]?.path || "",
+        employeeImage: req.files?.employeeImage?.[0]?.path || "",
         verified: verification.verified,
         verificationReason: verification.reason,
         status: "pending",
@@ -341,6 +375,7 @@ app.post(
   }
 );
 
+// Admin loads all reports
 app.get("/reports", auth, async (req, res) => {
   try {
     const reports = await Report.find().sort({ createdAt: -1 });
@@ -350,9 +385,21 @@ app.get("/reports", auth, async (req, res) => {
     res.status(500).json({ message: "Failed to load reports" });
   }
 });
-app.get("/", (req, res) => {
-  res.send("Black Cheetah Backend Running");
+
+// Employee loads own reports
+app.get("/my-reports", auth, async (req, res) => {
+  try {
+    const reports = await Report.find({ employeeId: req.user.id }).sort({
+      createdAt: -1,
+    });
+    res.json(reports);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to load employee reports" });
+  }
 });
+
+// Admin approves or rejects report
 app.patch("/reports/:id/status", auth, adminOnly, async (req, res) => {
   try {
     const { status } = req.body;
@@ -378,6 +425,7 @@ app.patch("/reports/:id/status", auth, adminOnly, async (req, res) => {
   }
 });
 
+// Admin assigns task by employee username
 app.post("/task", auth, adminOnly, async (req, res) => {
   try {
     const employee = await User.findOne({
@@ -405,6 +453,7 @@ app.post("/task", auth, adminOnly, async (req, res) => {
   }
 });
 
+// Employee loads own tasks
 app.get("/tasks", auth, async (req, res) => {
   try {
     const tasks = await Task.find({ assignedToId: req.user.id }).sort({
@@ -417,6 +466,7 @@ app.get("/tasks", auth, async (req, res) => {
   }
 });
 
+// Admin loads all tasks
 app.get("/all-tasks", auth, adminOnly, async (req, res) => {
   try {
     const tasks = await Task.find().sort({ createdAt: -1 });
@@ -427,6 +477,7 @@ app.get("/all-tasks", auth, adminOnly, async (req, res) => {
   }
 });
 
+// Employee completes task
 app.patch("/tasks/:id/complete", auth, async (req, res) => {
   try {
     const task = await Task.findOne({
@@ -479,7 +530,7 @@ app.patch("/notifications/:id/read", auth, adminOnly, async (req, res) => {
   }
 });
 
-// Cleanup expired report files and documents daily at 2 AM
+// Daily cleanup for expired report files
 cron.schedule("0 2 * * *", async () => {
   try {
     const expiredReports = await Report.find({
@@ -487,15 +538,13 @@ cron.schedule("0 2 * * *", async () => {
     });
 
     for (const report of expiredReports) {
-      [report.billImage, report.shopImage, report.employeeImage].forEach(
-        (file) => {
-          if (file && fs.existsSync(path.resolve(file))) {
-            try {
-              fs.unlinkSync(path.resolve(file));
-            } catch (_) {}
-          }
+      [report.billImage, report.shopImage, report.employeeImage].forEach((file) => {
+        if (file && fs.existsSync(path.resolve(file))) {
+          try {
+            fs.unlinkSync(path.resolve(file));
+          } catch (_) {}
         }
-      );
+      });
 
       await Report.findByIdAndDelete(report._id);
     }
