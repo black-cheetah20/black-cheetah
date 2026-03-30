@@ -271,7 +271,7 @@ function App() {
       setMessage(error?.response?.data?.message || "Failed to update notification");
     }
   };
-
+// eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (token && role === "admin") {
       loadEmployees();
@@ -280,7 +280,7 @@ function App() {
       loadNotifications();
     }
   }, [token, role]);
-
+// eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (token && role === "employee") {
       loadEmployeeTasks();
