@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import "./App.css";
 
@@ -36,31 +36,30 @@ function App() {
   });
 
   const [reports, setReports] = useState([]);
+  const [myReports, setMyReports] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [allTasks, setAllTasks] = useState([]);
   const [employeeTasks, setEmployeeTasks] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [message, setMessage] = useState("");
 
-  // Global search
   const [globalSearch, setGlobalSearch] = useState("");
-
-  // Employee filters
   const [employeeSearch, setEmployeeSearch] = useState("");
 
-  // Task filters
   const [taskSearch, setTaskSearch] = useState("");
   const [taskEmployeeFilter, setTaskEmployeeFilter] = useState("");
   const [taskStatusFilter, setTaskStatusFilter] = useState("all");
   const [taskDateFrom, setTaskDateFrom] = useState("");
   const [taskDateTo, setTaskDateTo] = useState("");
 
-  // Report filters
   const [reportSearch, setReportSearch] = useState("");
   const [reportEmployeeFilter, setReportEmployeeFilter] = useState("");
   const [reportStatusFilter, setReportStatusFilter] = useState("all");
   const [reportDateFrom, setReportDateFrom] = useState("");
   const [reportDateTo, setReportDateTo] = useState("");
+
+  const [adminTab, setAdminTab] = useState("employees");
+  const [employeeTab, setEmployeeTab] = useState("reports");
 
   const authHeader = {
     headers: {
@@ -91,6 +90,7 @@ function App() {
     setRole("");
     setUsername("");
     setReports([]);
+    setMyReports([]);
     setEmployees([]);
     setAllTasks([]);
     setEmployeeTasks([]);
@@ -133,7 +133,6 @@ function App() {
     try {
       const res = await axios.get(`${API}/employees`, authHeader);
       setEmployees(res.data);
-      setMessage("Employees loaded");
     } catch (error) {
       setMessage(error?.response?.data?.message || "Failed to load employees");
     }
@@ -158,7 +157,6 @@ function App() {
     try {
       const res = await axios.get(`${API}/all-tasks`, authHeader);
       setAllTasks(res.data);
-      setMessage("Tasks loaded");
     } catch (error) {
       setMessage(error?.response?.data?.message || "Failed to load tasks");
     }
@@ -168,7 +166,6 @@ function App() {
     try {
       const res = await axios.get(`${API}/tasks`, authHeader);
       setEmployeeTasks(res.data);
-      setMessage("My tasks loaded");
     } catch (error) {
       setMessage(error?.response?.data?.message || "Failed to load my tasks");
     }
@@ -208,6 +205,7 @@ function App() {
       });
 
       setMessage("Report submitted successfully");
+
       setEmployeeForm({
         expense: "",
         contact: "",
@@ -217,6 +215,8 @@ function App() {
         shopImage: null,
         employeeImage: null,
       });
+
+      loadMyReports();
     } catch (error) {
       setMessage(error?.response?.data?.message || "Report submission failed");
     }
@@ -226,9 +226,17 @@ function App() {
     try {
       const res = await axios.get(`${API}/reports`, authHeader);
       setReports(res.data);
-      setMessage("Reports loaded");
     } catch (error) {
       setMessage(error?.response?.data?.message || "Failed to load reports");
+    }
+  };
+
+  const loadMyReports = async () => {
+    try {
+      const res = await axios.get(`${API}/my-reports`, authHeader);
+      setMyReports(res.data);
+    } catch (error) {
+      setMessage(error?.response?.data?.message || "Failed to load my reports");
     }
   };
 
@@ -250,7 +258,6 @@ function App() {
     try {
       const res = await axios.get(`${API}/notifications`, authHeader);
       setNotifications(res.data);
-      setMessage("Notifications loaded");
     } catch (error) {
       setMessage(error?.response?.data?.message || "Failed to load notifications");
     }
@@ -265,6 +272,22 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (token && role === "admin") {
+      loadEmployees();
+      loadReports();
+      loadAllTasks();
+      loadNotifications();
+    }
+  }, [token, role]);
+
+  useEffect(() => {
+    if (token && role === "employee") {
+      loadEmployeeTasks();
+      loadMyReports();
+    }
+  }, [token, role]);
+
   const formatImageUrl = (filePath) => {
     if (!filePath) return "";
     return `${API}/${filePath.replace(/\\/g, "/")}`;
@@ -273,16 +296,19 @@ function App() {
   const dateInRange = (dateValue, from, to) => {
     if (!dateValue) return true;
     const itemDate = new Date(dateValue);
+
     if (from) {
       const fromDate = new Date(from);
       fromDate.setHours(0, 0, 0, 0);
       if (itemDate < fromDate) return false;
     }
+
     if (to) {
       const toDate = new Date(to);
       toDate.setHours(23, 59, 59, 999);
       if (itemDate > toDate) return false;
     }
+
     return true;
   };
 
@@ -316,7 +342,6 @@ function App() {
           : taskStatusFilter === "completed"
           ? task.completed === true
           : task.completed === false;
-
       const dateMatch = dateInRange(task.createdAt, taskDateFrom, taskDateTo);
 
       return searchMatch && globalMatch && employeeMatch && statusMatch && dateMatch;
@@ -336,8 +361,7 @@ function App() {
     const g = globalSearch.trim().toLowerCase();
 
     return reports.filter((report) => {
-      const text =
-        `${report.employeeName} ${report.contact} ${report.orderDetails} ${report.location} ${report.status}`.toLowerCase();
+      const text = `${report.employeeName} ${report.contact} ${report.orderDetails} ${report.location} ${report.status}`.toLowerCase();
 
       const searchMatch = q ? text.includes(q) : true;
       const globalMatch = g ? text.includes(g) : true;
@@ -348,7 +372,6 @@ function App() {
         reportStatusFilter === "all"
           ? true
           : report.status === reportStatusFilter;
-
       const dateMatch = dateInRange(report.createdAt, reportDateFrom, reportDateTo);
 
       return searchMatch && globalMatch && employeeMatch && statusMatch && dateMatch;
@@ -422,9 +445,6 @@ function App() {
           </div>
 
           <div className="topbar-actions">
-            <button className="secondary-btn" onClick={loadEmployeeTasks}>
-              Load My Tasks
-            </button>
             <button className="danger-btn" onClick={logout}>
               Logout
             </button>
@@ -433,7 +453,28 @@ function App() {
 
         {message && <div className="message-box">{message}</div>}
 
-        <div className="grid two-col">
+        <div className="tab-bar">
+          <button
+            className={employeeTab === "reports" ? "tab-btn active-tab" : "tab-btn"}
+            onClick={() => setEmployeeTab("reports")}
+          >
+            Submit Report
+          </button>
+          <button
+            className={employeeTab === "tasks" ? "tab-btn active-tab" : "tab-btn"}
+            onClick={() => setEmployeeTab("tasks")}
+          >
+            My Tasks
+          </button>
+          <button
+            className={employeeTab === "status" ? "tab-btn active-tab" : "tab-btn"}
+            onClick={() => setEmployeeTab("status")}
+          >
+            Report Status
+          </button>
+        </div>
+
+        {employeeTab === "reports" && (
           <div className="panel">
             <h2>Submit Report</h2>
 
@@ -513,21 +554,22 @@ function App() {
               Submit Report
             </button>
           </div>
+        )}
 
+        {employeeTab === "tasks" && (
           <div className="panel">
             <h2>My Tasks</h2>
 
             {employeeTasks.length === 0 ? (
-              <p className="muted">No tasks loaded yet.</p>
+              <p className="muted">No tasks found.</p>
             ) : (
               employeeTasks.map((task) => (
                 <div className="task-card" key={task._id}>
                   <p><strong>Title:</strong> {task.title}</p>
                   <p><strong>Description:</strong> {task.description}</p>
                   <p><strong>Assigned By:</strong> {task.assignedBy}</p>
-                  <p>
-                    <strong>Status:</strong> {task.completed ? "Completed" : "Pending"}
-                  </p>
+                  <p><strong>Status:</strong> {task.completed ? "Completed" : "Pending"}</p>
+                  <p><strong>Date:</strong> {new Date(task.createdAt).toLocaleString()}</p>
 
                   {!task.completed && (
                     <button
@@ -541,7 +583,29 @@ function App() {
               ))
             )}
           </div>
-        </div>
+        )}
+
+        {employeeTab === "status" && (
+          <div className="panel">
+            <h2>My Report Status</h2>
+
+            {myReports.length === 0 ? (
+              <p className="muted">No reports found.</p>
+            ) : (
+              myReports.map((report) => (
+                <div className="task-card" key={report._id}>
+                  <p><strong>Location:</strong> {report.location}</p>
+                  <p><strong>Expense:</strong> ₹{report.expense}</p>
+                  <p><strong>Order Details:</strong> {report.orderDetails}</p>
+                  <p><strong>Status:</strong> {report.status}</p>
+                  <p><strong>Verified:</strong> {report.verified ? "Yes" : "No"}</p>
+                  <p><strong>Reason:</strong> {report.verificationReason}</p>
+                  <p><strong>Date:</strong> {new Date(report.createdAt).toLocaleString()}</p>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
     );
   }
@@ -555,23 +619,13 @@ function App() {
         </div>
 
         <div className="topbar-actions">
-          <button className="secondary-btn" onClick={loadEmployees}>
-            Employees
-          </button>
-          <button className="secondary-btn" onClick={loadReports}>
-            Reports
-          </button>
-          <button className="secondary-btn" onClick={loadAllTasks}>
-            Tasks
-          </button>
-          <button className="secondary-btn" onClick={loadNotifications}>
-            Notifications
-          </button>
           <button className="danger-btn" onClick={logout}>
             Logout
           </button>
         </div>
       </div>
+
+      {message && <div className="message-box">{message}</div>}
 
       <div className="panel">
         <h2>Global Search</h2>
@@ -583,9 +637,40 @@ function App() {
         />
       </div>
 
-      {message && <div className="message-box">{message}</div>}
+      <div className="tab-bar">
+        <button
+          className={adminTab === "employees" ? "tab-btn active-tab" : "tab-btn"}
+          onClick={() => setAdminTab("employees")}
+        >
+          Employees
+        </button>
+        <button
+          className={adminTab === "tasks" ? "tab-btn active-tab" : "tab-btn"}
+          onClick={() => setAdminTab("tasks")}
+        >
+          Tasks
+        </button>
+        <button
+          className={adminTab === "reports" ? "tab-btn active-tab" : "tab-btn"}
+          onClick={() => setAdminTab("reports")}
+        >
+          Reports
+        </button>
+        <button
+          className={adminTab === "notifications" ? "tab-btn active-tab" : "tab-btn"}
+          onClick={() => setAdminTab("notifications")}
+        >
+          Notifications
+        </button>
+        <button
+          className={adminTab === "all" ? "tab-btn active-tab" : "tab-btn"}
+          onClick={() => setAdminTab("all")}
+        >
+          All
+        </button>
+      </div>
 
-      <div className="grid two-col">
+      {(adminTab === "employees" || adminTab === "all") && (
         <div className="panel">
           <h2>Create Employee</h2>
 
@@ -635,6 +720,7 @@ function App() {
               <div className="task-card" key={emp._id}>
                 <p><strong>Username:</strong> {emp.username}</p>
                 <p><strong>ID:</strong> {emp._id}</p>
+                <p><strong>Created:</strong> {new Date(emp.createdAt).toLocaleString()}</p>
 
                 <button
                   className="danger-btn small-btn"
@@ -646,7 +732,9 @@ function App() {
             ))
           )}
         </div>
+      )}
 
+      {(adminTab === "tasks" || adminTab === "all") && (
         <div className="panel">
           <h2>Assign Task</h2>
 
@@ -688,16 +776,211 @@ function App() {
             Assign Task
           </button>
 
-          <h3 className="section-title">Notifications</h3>
+          <h3 className="section-title">Task Filters</h3>
+          <div className="filter-grid">
+            <input
+              className="input"
+              placeholder="Search tasks"
+              value={taskSearch}
+              onChange={(e) => setTaskSearch(e.target.value)}
+            />
+
+            <select
+              className="input"
+              value={taskEmployeeFilter}
+              onChange={(e) => setTaskEmployeeFilter(e.target.value)}
+            >
+              <option value="">All Employees</option>
+              {employeeNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="input"
+              value={taskStatusFilter}
+              onChange={(e) => setTaskStatusFilter(e.target.value)}
+            >
+              <option value="all">All Status</option>
+              <option value="completed">Completed</option>
+              <option value="incomplete">Incomplete</option>
+            </select>
+
+            <input
+              className="input"
+              type="date"
+              value={taskDateFrom}
+              onChange={(e) => setTaskDateFrom(e.target.value)}
+            />
+
+            <input
+              className="input"
+              type="date"
+              value={taskDateTo}
+              onChange={(e) => setTaskDateTo(e.target.value)}
+            />
+          </div>
+
+          <h3 className="section-title">All Tasks</h3>
+
+          {filteredTasks.length === 0 ? (
+            <p className="muted">No tasks found.</p>
+          ) : (
+            filteredTasks.map((task) => (
+              <div className="task-card" key={task._id}>
+                <p><strong>Title:</strong> {task.title}</p>
+                <p><strong>Description:</strong> {task.description}</p>
+                <p><strong>Assigned To:</strong> {task.assignedToName}</p>
+                <p><strong>Assigned By:</strong> {task.assignedBy}</p>
+                <p><strong>Status:</strong> {task.completed ? "Completed" : "Pending"}</p>
+                <p><strong>Date:</strong> {new Date(task.createdAt).toLocaleString()}</p>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {(adminTab === "reports" || adminTab === "all") && (
+        <div className="panel">
+          <h2>Reports</h2>
+
+          <div className="filter-grid">
+            <input
+              className="input"
+              placeholder="Search reports"
+              value={reportSearch}
+              onChange={(e) => setReportSearch(e.target.value)}
+            />
+
+            <select
+              className="input"
+              value={reportEmployeeFilter}
+              onChange={(e) => setReportEmployeeFilter(e.target.value)}
+            >
+              <option value="">All Employees</option>
+              {reportEmployeeNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className="input"
+              value={reportStatusFilter}
+              onChange={(e) => setReportStatusFilter(e.target.value)}
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select>
+
+            <input
+              className="input"
+              type="date"
+              value={reportDateFrom}
+              onChange={(e) => setReportDateFrom(e.target.value)}
+            />
+
+            <input
+              className="input"
+              type="date"
+              value={reportDateTo}
+              onChange={(e) => setReportDateTo(e.target.value)}
+            />
+          </div>
+
+          {filteredReports.length === 0 ? (
+            <p className="muted">No reports found.</p>
+          ) : (
+            filteredReports.map((report) => (
+              <div className="report-card" key={report._id}>
+                <div className="report-grid">
+                  <div>
+                    <p><strong>Employee:</strong> {report.employeeName}</p>
+                    <p><strong>Expense:</strong> ₹{report.expense}</p>
+                    <p><strong>Contact:</strong> {report.contact}</p>
+                    <p><strong>Order Details:</strong> {report.orderDetails}</p>
+                    <p><strong>Location:</strong> {report.location}</p>
+                    <p><strong>AI Verified:</strong> {report.verified ? "Yes" : "No"}</p>
+                    <p><strong>AI Reason:</strong> {report.verificationReason}</p>
+                    <p><strong>Status:</strong> {report.status}</p>
+                    <p><strong>Date:</strong> {new Date(report.createdAt).toLocaleString()}</p>
+
+                    <div className="button-row">
+                      <button
+                        className="primary-btn small-btn"
+                        onClick={() => updateReportStatus(report._id, "approved")}
+                      >
+                        Approve
+                      </button>
+
+                      <button
+                        className="danger-btn small-btn"
+                        onClick={() => updateReportStatus(report._id, "rejected")}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="image-grid">
+                    <div className="image-box">
+                      <p>Bill</p>
+                      {report.billImage && (
+                        <img
+                          src={formatImageUrl(report.billImage)}
+                          alt="Bill"
+                          className="report-image"
+                        />
+                      )}
+                    </div>
+
+                    <div className="image-box">
+                      <p>Shop</p>
+                      {report.shopImage && (
+                        <img
+                          src={formatImageUrl(report.shopImage)}
+                          alt="Shop"
+                          className="report-image"
+                        />
+                      )}
+                    </div>
+
+                    <div className="image-box">
+                      <p>Employee</p>
+                      {report.employeeImage && (
+                        <img
+                          src={formatImageUrl(report.employeeImage)}
+                          alt="Employee"
+                          className="report-image"
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {(adminTab === "notifications" || adminTab === "all") && (
+        <div className="panel">
+          <h2>Notifications</h2>
 
           {notifications.length === 0 ? (
-            <p className="muted">No notifications loaded yet.</p>
+            <p className="muted">No notifications found.</p>
           ) : (
             notifications.map((n) => (
               <div className="task-card" key={n._id}>
                 <p><strong>{n.title}</strong></p>
                 <p>{n.message}</p>
                 <p><strong>Status:</strong> {n.read ? "Read" : "Unread"}</p>
+                <p><strong>Date:</strong> {new Date(n.createdAt).toLocaleString()}</p>
 
                 {!n.read && (
                   <button
@@ -711,196 +994,7 @@ function App() {
             ))
           )}
         </div>
-      </div>
-
-      <div className="panel">
-        <h2>Tasks</h2>
-
-        <div className="filter-grid">
-          <input
-            className="input"
-            placeholder="Search tasks"
-            value={taskSearch}
-            onChange={(e) => setTaskSearch(e.target.value)}
-          />
-
-          <select
-            className="input"
-            value={taskEmployeeFilter}
-            onChange={(e) => setTaskEmployeeFilter(e.target.value)}
-          >
-            <option value="">All Employees</option>
-            {employeeNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="input"
-            value={taskStatusFilter}
-            onChange={(e) => setTaskStatusFilter(e.target.value)}
-          >
-            <option value="all">All Status</option>
-            <option value="completed">Completed</option>
-            <option value="incomplete">Incomplete</option>
-          </select>
-
-          <input
-            className="input"
-            type="date"
-            value={taskDateFrom}
-            onChange={(e) => setTaskDateFrom(e.target.value)}
-          />
-
-          <input
-            className="input"
-            type="date"
-            value={taskDateTo}
-            onChange={(e) => setTaskDateTo(e.target.value)}
-          />
-        </div>
-
-        {filteredTasks.length === 0 ? (
-          <p className="muted">No tasks found.</p>
-        ) : (
-          filteredTasks.map((task) => (
-            <div className="task-card" key={task._id}>
-              <p><strong>Title:</strong> {task.title}</p>
-              <p><strong>Description:</strong> {task.description}</p>
-              <p><strong>Assigned To:</strong> {task.assignedToName}</p>
-              <p><strong>Assigned By:</strong> {task.assignedBy}</p>
-              <p><strong>Status:</strong> {task.completed ? "Completed" : "Pending"}</p>
-              <p><strong>Date:</strong> {new Date(task.createdAt).toLocaleString()}</p>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div className="panel">
-        <h2>Reports</h2>
-
-        <div className="filter-grid">
-          <input
-            className="input"
-            placeholder="Search reports"
-            value={reportSearch}
-            onChange={(e) => setReportSearch(e.target.value)}
-          />
-
-          <select
-            className="input"
-            value={reportEmployeeFilter}
-            onChange={(e) => setReportEmployeeFilter(e.target.value)}
-          >
-            <option value="">All Employees</option>
-            {reportEmployeeNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-
-          <select
-            className="input"
-            value={reportStatusFilter}
-            onChange={(e) => setReportStatusFilter(e.target.value)}
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
-            <option value="rejected">Rejected</option>
-          </select>
-
-          <input
-            className="input"
-            type="date"
-            value={reportDateFrom}
-            onChange={(e) => setReportDateFrom(e.target.value)}
-          />
-
-          <input
-            className="input"
-            type="date"
-            value={reportDateTo}
-            onChange={(e) => setReportDateTo(e.target.value)}
-          />
-        </div>
-
-        {filteredReports.length === 0 ? (
-          <p className="muted">No reports found.</p>
-        ) : (
-          filteredReports.map((report) => (
-            <div className="report-card" key={report._id}>
-              <div className="report-grid">
-                <div>
-                  <p><strong>Employee:</strong> {report.employeeName}</p>
-                  <p><strong>Expense:</strong> ₹{report.expense}</p>
-                  <p><strong>Contact:</strong> {report.contact}</p>
-                  <p><strong>Order Details:</strong> {report.orderDetails}</p>
-                  <p><strong>Location:</strong> {report.location}</p>
-                  <p><strong>AI Verified:</strong> {report.verified ? "Yes" : "No"}</p>
-                  <p><strong>AI Reason:</strong> {report.verificationReason}</p>
-                  <p><strong>Status:</strong> {report.status}</p>
-                  <p><strong>Date:</strong> {new Date(report.createdAt).toLocaleString()}</p>
-
-                  <div className="button-row">
-                    <button
-                      className="primary-btn small-btn"
-                      onClick={() => updateReportStatus(report._id, "approved")}
-                    >
-                      Approve
-                    </button>
-
-                    <button
-                      className="danger-btn small-btn"
-                      onClick={() => updateReportStatus(report._id, "rejected")}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-
-                <div className="image-grid">
-                  <div className="image-box">
-                    <p>Bill</p>
-                    {report.billImage && (
-                      <img
-                        src={formatImageUrl(report.billImage)}
-                        alt="Bill"
-                        className="report-image"
-                      />
-                    )}
-                  </div>
-
-                  <div className="image-box">
-                    <p>Shop</p>
-                    {report.shopImage && (
-                      <img
-                        src={formatImageUrl(report.shopImage)}
-                        alt="Shop"
-                        className="report-image"
-                      />
-                    )}
-                  </div>
-
-                  <div className="image-box">
-                    <p>Employee</p>
-                    {report.employeeImage && (
-                      <img
-                        src={formatImageUrl(report.employeeImage)}
-                        alt="Employee"
-                        className="report-image"
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      )}
     </div>
   );
 }

@@ -184,3 +184,41 @@ select {
     grid-template-columns: 1fr;
   }
 }
+.tab-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.tab-btn {
+  border: none;
+  background: #eee;
+  color: #111;
+  padding: 10px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.active-tab {
+  background: #d40000;
+  color: white;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.dark-subtext {
+  color: #555;
+}
+
+@media (max-width: 900px) {
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+}
