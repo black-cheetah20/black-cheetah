@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import "./App.css";
 
@@ -61,11 +61,14 @@ function App() {
   const [adminTab, setAdminTab] = useState("employees");
   const [employeeTab, setEmployeeTab] = useState("reports");
 
-  const authHeader = {
-    headers: {
-      Authorization: token,
-    },
-  };
+  const authHeader = useMemo(
+    () => ({
+      headers: {
+        Authorization: token,
+      },
+    }),
+    [token]
+  );
 
   const handleLogin = async () => {
     try {
@@ -99,6 +102,60 @@ function App() {
     setMessage("Logged out");
   };
 
+  const loadEmployees = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/employees`, authHeader);
+      setEmployees(res.data);
+    } catch (error) {
+      setMessage(error?.response?.data?.message || "Failed to load employees");
+    }
+  }, [authHeader]);
+
+  const loadAllTasks = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/all-tasks`, authHeader);
+      setAllTasks(res.data);
+    } catch (error) {
+      setMessage(error?.response?.data?.message || "Failed to load tasks");
+    }
+  }, [authHeader]);
+
+  const loadEmployeeTasks = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/tasks`, authHeader);
+      setEmployeeTasks(res.data);
+    } catch (error) {
+      setMessage(error?.response?.data?.message || "Failed to load my tasks");
+    }
+  }, [authHeader]);
+
+  const loadReports = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/reports`, authHeader);
+      setReports(res.data);
+    } catch (error) {
+      setMessage(error?.response?.data?.message || "Failed to load reports");
+    }
+  }, [authHeader]);
+
+  const loadMyReports = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/my-reports`, authHeader);
+      setMyReports(res.data);
+    } catch (error) {
+      setMessage(error?.response?.data?.message || "Failed to load my reports");
+    }
+  }, [authHeader]);
+
+  const loadNotifications = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API}/notifications`, authHeader);
+      setNotifications(res.data);
+    } catch (error) {
+      setMessage(error?.response?.data?.message || "Failed to load notifications");
+    }
+  }, [authHeader]);
+
   const createEmployee = async () => {
     try {
       const res = await axios.post(
@@ -129,15 +186,6 @@ function App() {
     }
   };
 
-  const loadEmployees = async () => {
-    try {
-      const res = await axios.get(`${API}/employees`, authHeader);
-      setEmployees(res.data);
-    } catch (error) {
-      setMessage(error?.response?.data?.message || "Failed to load employees");
-    }
-  };
-
   const assignTask = async () => {
     try {
       const res = await axios.post(`${API}/task`, taskForm, authHeader);
@@ -150,24 +198,6 @@ function App() {
       loadAllTasks();
     } catch (error) {
       setMessage(error?.response?.data?.message || "Task assignment failed");
-    }
-  };
-
-  const loadAllTasks = async () => {
-    try {
-      const res = await axios.get(`${API}/all-tasks`, authHeader);
-      setAllTasks(res.data);
-    } catch (error) {
-      setMessage(error?.response?.data?.message || "Failed to load tasks");
-    }
-  };
-
-  const loadEmployeeTasks = async () => {
-    try {
-      const res = await axios.get(`${API}/tasks`, authHeader);
-      setEmployeeTasks(res.data);
-    } catch (error) {
-      setMessage(error?.response?.data?.message || "Failed to load my tasks");
     }
   };
 
@@ -193,9 +223,15 @@ function App() {
       formData.append("orderDetails", employeeForm.orderDetails);
       formData.append("location", employeeForm.location);
 
-      if (employeeForm.billImage) formData.append("billImage", employeeForm.billImage);
-      if (employeeForm.shopImage) formData.append("shopImage", employeeForm.shopImage);
-      if (employeeForm.employeeImage) formData.append("employeeImage", employeeForm.employeeImage);
+      if (employeeForm.billImage) {
+        formData.append("billImage", employeeForm.billImage);
+      }
+      if (employeeForm.shopImage) {
+        formData.append("shopImage", employeeForm.shopImage);
+      }
+      if (employeeForm.employeeImage) {
+        formData.append("employeeImage", employeeForm.employeeImage);
+      }
 
       await axios.post(`${API}/report`, formData, {
         headers: {
@@ -205,7 +241,6 @@ function App() {
       });
 
       setMessage("Report submitted successfully");
-
       setEmployeeForm({
         expense: "",
         contact: "",
@@ -215,28 +250,9 @@ function App() {
         shopImage: null,
         employeeImage: null,
       });
-
       loadMyReports();
     } catch (error) {
       setMessage(error?.response?.data?.message || "Report submission failed");
-    }
-  };
-
-  const loadReports = async () => {
-    try {
-      const res = await axios.get(`${API}/reports`, authHeader);
-      setReports(res.data);
-    } catch (error) {
-      setMessage(error?.response?.data?.message || "Failed to load reports");
-    }
-  };
-
-  const loadMyReports = async () => {
-    try {
-      const res = await axios.get(`${API}/my-reports`, authHeader);
-      setMyReports(res.data);
-    } catch (error) {
-      setMessage(error?.response?.data?.message || "Failed to load my reports");
     }
   };
 
@@ -254,15 +270,6 @@ function App() {
     }
   };
 
-  const loadNotifications = async () => {
-    try {
-      const res = await axios.get(`${API}/notifications`, authHeader);
-      setNotifications(res.data);
-    } catch (error) {
-      setMessage(error?.response?.data?.message || "Failed to load notifications");
-    }
-  };
-
   const markNotificationRead = async (id) => {
     try {
       await axios.patch(`${API}/notifications/${id}/read`, {}, authHeader);
@@ -271,23 +278,23 @@ function App() {
       setMessage(error?.response?.data?.message || "Failed to update notification");
     }
   };
-// eslint-disable-next-line react-hooks/exhaustive-deps
-useEffect(() => {
-  if (token && role === "admin") {
-    loadEmployees();
-    loadReports();
-    loadAllTasks();
-    loadNotifications();
-  }
-}, [token, role]);
 
-// eslint-disable-next-line react-hooks/exhaustive-deps
-useEffect(() => {
-  if (token && role === "employee") {
-    loadEmployeeTasks();
-    loadMyReports();
-  }
-}, [token, role]);
+  useEffect(() => {
+    if (token && role === "admin") {
+      loadEmployees();
+      loadReports();
+      loadAllTasks();
+      loadNotifications();
+    }
+  }, [token, role, loadEmployees, loadReports, loadAllTasks, loadNotifications]);
+
+  useEffect(() => {
+    if (token && role === "employee") {
+      loadEmployeeTasks();
+      loadMyReports();
+    }
+  }, [token, role, loadEmployeeTasks, loadMyReports]);
+
   const formatImageUrl = (filePath) => {
     if (!filePath) return "";
     return `${API}/${filePath.replace(/\\/g, "/")}`;
