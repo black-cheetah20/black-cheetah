@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import axios from "axios";
 import "./App.css";
 
@@ -60,6 +66,12 @@ function App() {
 
   const [adminTab, setAdminTab] = useState("employees");
   const [employeeTab, setEmployeeTab] = useState("reports");
+
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const touchStartY = useRef(0);
+  const isPulling = useRef(false);
 
   const authHeader = useMemo(
     () => ({
@@ -156,6 +168,74 @@ function App() {
     }
   }, [authHeader]);
 
+  const refreshCurrentView = useCallback(async () => {
+    setIsRefreshing(true);
+
+    try {
+      if (token && role === "admin") {
+        await Promise.all([
+          loadEmployees(),
+          loadReports(),
+          loadAllTasks(),
+          loadNotifications(),
+        ]);
+      }
+
+      if (token && role === "employee") {
+        await Promise.all([loadEmployeeTasks(), loadMyReports()]);
+      }
+
+      setMessage("Refreshed");
+    } catch (error) {
+      setMessage("Refresh failed");
+    } finally {
+      setTimeout(() => {
+        setIsRefreshing(false);
+        setPullDistance(0);
+      }, 500);
+    }
+  }, [
+    token,
+    role,
+    loadEmployees,
+    loadReports,
+    loadAllTasks,
+    loadNotifications,
+    loadEmployeeTasks,
+    loadMyReports,
+  ]);
+
+  const handleTouchStart = (e) => {
+    if (window.scrollY === 0) {
+      touchStartY.current = e.touches[0].clientY;
+      isPulling.current = true;
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isPulling.current || isRefreshing) return;
+
+    const currentY = e.touches[0].clientY;
+    const diff = currentY - touchStartY.current;
+
+    if (diff > 0 && window.scrollY === 0) {
+      const limited = Math.min(diff, 120);
+      setPullDistance(limited);
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (!isPulling.current) return;
+
+    isPulling.current = false;
+
+    if (pullDistance >= 80) {
+      await refreshCurrentView();
+    } else {
+      setPullDistance(0);
+    }
+  };
+
   const createEmployee = async () => {
     try {
       const res = await axios.post(
@@ -198,6 +278,19 @@ function App() {
       loadAllTasks();
     } catch (error) {
       setMessage(error?.response?.data?.message || "Task assignment failed");
+    }
+  };
+
+  const deleteTask = async (taskId) => {
+    const ok = window.confirm("Are you sure you want to delete this task?");
+    if (!ok) return;
+
+    try {
+      const res = await axios.delete(`${API}/tasks/${taskId}`, authHeader);
+      setMessage(res.data.message || "Task deleted");
+      loadAllTasks();
+    } catch (error) {
+      setMessage(error?.response?.data?.message || "Failed to delete task");
     }
   };
 
@@ -336,7 +429,8 @@ function App() {
     const g = globalSearch.trim().toLowerCase();
 
     return allTasks.filter((task) => {
-      const text = `${task.title} ${task.description} ${task.assignedToName} ${task.assignedBy}`.toLowerCase();
+      const text =
+        `${task.title} ${task.description} ${task.assignedToName} ${task.assignedBy}`.toLowerCase();
 
       const searchMatch = q ? text.includes(q) : true;
       const globalMatch = g ? text.includes(g) : true;
@@ -351,7 +445,13 @@ function App() {
           : task.completed === false;
       const dateMatch = dateInRange(task.createdAt, taskDateFrom, taskDateTo);
 
-      return searchMatch && globalMatch && employeeMatch && statusMatch && dateMatch;
+      return (
+        searchMatch &&
+        globalMatch &&
+        employeeMatch &&
+        statusMatch &&
+        dateMatch
+      );
     });
   }, [
     allTasks,
@@ -368,7 +468,8 @@ function App() {
     const g = globalSearch.trim().toLowerCase();
 
     return reports.filter((report) => {
-      const text = `${report.employeeName} ${report.contact} ${report.orderDetails} ${report.location} ${report.status}`.toLowerCase();
+      const text =
+        `${report.employeeName} ${report.contact} ${report.orderDetails} ${report.location} ${report.status}`.toLowerCase();
 
       const searchMatch = q ? text.includes(q) : true;
       const globalMatch = g ? text.includes(g) : true;
@@ -381,7 +482,13 @@ function App() {
           : report.status === reportStatusFilter;
       const dateMatch = dateInRange(report.createdAt, reportDateFrom, reportDateTo);
 
-      return searchMatch && globalMatch && employeeMatch && statusMatch && dateMatch;
+      return (
+        searchMatch &&
+        globalMatch &&
+        employeeMatch &&
+        statusMatch &&
+        dateMatch
+      );
     });
   }, [
     reports,
@@ -401,6 +508,15 @@ function App() {
   const reportEmployeeNames = useMemo(
     () => [...new Set(reports.map((r) => r.employeeName).filter(Boolean))],
     [reports]
+  );
+
+  const PullLoader = () => (
+    <div
+      className={`pull-refresh ${isRefreshing ? "refreshing" : ""}`}
+      style={{ transform: `translateY(${pullDistance}px)` }}
+    >
+      <div className="pull-refresh-loader" />
+    </div>
   );
 
   if (!token) {
@@ -444,7 +560,14 @@ function App() {
 
   if (role === "employee") {
     return (
-      <div className="page">
+      <div
+        className="page"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <PullLoader />
+
         <div className="topbar">
           <div>
             <h1>BLACK CHEETAH</h1>
@@ -618,7 +741,14 @@ function App() {
   }
 
   return (
-    <div className="page">
+    <div
+      className="page"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <PullLoader />
+
       <div className="topbar">
         <div>
           <h1>BLACK CHEETAH</h1>
@@ -784,6 +914,8 @@ function App() {
           </button>
 
           <h3 className="section-title">Task Filters</h3>
+          <p className="filter-title">Filter by Employee, Status and Date Range</p>
+
           <div className="filter-grid">
             <input
               className="input"
@@ -843,6 +975,13 @@ function App() {
                 <p><strong>Assigned By:</strong> {task.assignedBy}</p>
                 <p><strong>Status:</strong> {task.completed ? "Completed" : "Pending"}</p>
                 <p><strong>Date:</strong> {new Date(task.createdAt).toLocaleString()}</p>
+
+                <button
+                  className="danger-btn small-btn"
+                  onClick={() => deleteTask(task._id)}
+                >
+                  Delete Task
+                </button>
               </div>
             ))
           )}
@@ -852,6 +991,9 @@ function App() {
       {(adminTab === "reports" || adminTab === "all") && (
         <div className="panel">
           <h2>Reports</h2>
+
+          <h3 className="section-title">Report Filters</h3>
+          <p className="filter-title">Filter by Employee, Status and Date Range</p>
 
           <div className="filter-grid">
             <input
